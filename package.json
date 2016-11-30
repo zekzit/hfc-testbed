@@ -1,0 +1,22 @@
+{
+  "name": "hfc-testbed",
+  "version": "0.0.1",
+  "description": "\"# hfc-testbed\"",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zekzit/hfc-testbed.git"
+  },
+  "author": "Seksit Disaro",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/zekzit/hfc-testbed/issues"
+  },
+  "homepage": "https://github.com/zekzit/hfc-testbed#readme",
+  "dependencies": {
+    "hfc": "^0.6.5"
+  }
+}
