@@ -45,7 +45,7 @@ chain.addPeer("grpc://"+PEER_ADDRESS);
 
 // The following is required when the peer is started in dev mode
 // (i.e. with the '--peer-chaincodedev' option)
-var mode =  process.env['DEPLOY_MODE'];
+var mode =  process.env['DEPLOY_MODE'] || 'dev';
 console.log("DEPLOY_MODE=" + mode);
 if (mode === 'dev') {
     chain.setDevMode(true);
