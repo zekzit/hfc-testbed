@@ -5,7 +5,9 @@
       <root url="file://$PROJECT_DIR$/../../../../../mime" />
       <root url="file://$PROJECT_DIR$/../../../../../context" />
       <root url="file://$PROJECT_DIR$/../../../../../html" />
+      <root url="file://$PROJECT_DIR$/../../../../../src" />
       <root url="file://$PROJECT_DIR$/../../../../../path" />
+      <root url="file://$PROJECT_DIR$/../../../../../pkg" />
       <root url="file://$PROJECT_DIR$/../../../../../reflect" />
       <root url="file://$PROJECT_DIR$/../../../../../image" />
       <root url="file://$PROJECT_DIR$/../../../../../text" />
@@ -52,7 +54,9 @@
       <root url="file://$PROJECT_DIR$/../../../../../mime" />
       <root url="file://$PROJECT_DIR$/../../../../../context" />
       <root url="file://$PROJECT_DIR$/../../../../../html" />
+      <root url="file://$PROJECT_DIR$/../../../../../src" />
       <root url="file://$PROJECT_DIR$/../../../../../path" />
+      <root url="file://$PROJECT_DIR$/../../../../../pkg" />
       <root url="file://$PROJECT_DIR$/../../../../../reflect" />
       <root url="file://$PROJECT_DIR$/../../../../../image" />
       <root url="file://$PROJECT_DIR$/../../../../../text" />

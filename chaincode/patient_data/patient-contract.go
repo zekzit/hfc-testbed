@@ -1,10 +1,13 @@
-package patient_data
+package main
 
 import (
 	"errors"
 	"fmt"
 	"time"
-	//"strconv"
+	"bytes"
+	"crypto/sha1"
+	"encoding/json"
+	"strconv"
 
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/op/go-logging"
@@ -17,56 +20,6 @@ type PatientChaincode struct {
 }
 
 func (t *PatientChaincode) Init(stub shim.ChaincodeStubInterface) ([]byte, error) {
-	// Create User table
-	errUser := stub.CreateTable("User", []*shim.ColumnDefinition{
-		&shim.ColumnDefinition{Name: "Key", Type: shim.ColumnDefinition_BYTES, Key: true},
-		&shim.ColumnDefinition{Name: "Role", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "Info", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "CreatedDateTime", Type: shim.ColumnDefinition_STRING, Key: false},
-	})
-	if errUser != nil {
-		return nil, errors.New("Failed creating User table.")
-	}
-
-	// Create AuditLog table
-	errAudit := stub.CreateTable("AuditLog", []*shim.ColumnDefinition{
-		&shim.ColumnDefinition{Name: "Action", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "Subject", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "Object", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "Result", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "Reason", Type: shim.ColumnDefinition_STRING, Key: false},
-	})
-	if errAudit != nil {
-		return nil, errors.New("Failed creating AuditLog table.")
-	}
-
-	// Create Authorization table
-	errAuth := stub.CreateTable("Authorization", []*shim.ColumnDefinition{
-		&shim.ColumnDefinition{Name: "Patient", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "HCP", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "RequestedPermission", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "GrantedPermission", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "RequestedDateTime", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "GrantedDateTime", Type: shim.ColumnDefinition_STRING, Key: false},
-	})
-	if errAuth != nil {
-		return nil, errors.New("Failed creating Authorization table.")
-	}
-
-	// Create MedicalData table
-	errMedData := stub.CreateTable("MedicalData", []*shim.ColumnDefinition{
-		&shim.ColumnDefinition{Name: "Patient", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "HCP", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "MedicalDataType", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "MedicalDataId", Type: shim.ColumnDefinition_STRING, Key: true},
-		&shim.ColumnDefinition{Name: "MedicalData", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "CreatedDateTime", Type: shim.ColumnDefinition_STRING, Key: false},
-		&shim.ColumnDefinition{Name: "ModifiedDateTime", Type: shim.ColumnDefinition_STRING, Key: false},
-	})
-	if errMedData != nil {
-		return nil, errors.New("Failed creating MedicalData table.")
-	}
-
 	// Set the admin
 	adminCert, errGetData := stub.GetCallerMetadata()
 	if errGetData != nil {
@@ -80,37 +33,174 @@ func (t *PatientChaincode) Init(stub shim.ChaincodeStubInterface) ([]byte, error
 
 	myLogger.Debug("The administrator is [%x]", adminCert)
 
-	var currentDateTime = time.Now().Format(time.UnixDate)
+	currentDateTime := time.Now().Format(time.UnixDate)
 
-	ok, errInsertRow := stub.InsertRow("User",shim.Row{
-		Columns: []*shim.Column{
-			&shim.Column{Value: &shim.Column_Bytes{Bytes: adminCert}},
-			&shim.Column{Value: &shim.Column_String_{String_: ROLE_ADMIN}},
-			&shim.Column{Value: &shim.Column_String_{String_: ""}},
-			&shim.Column{Value: &shim.Column_String_{String_: currentDateTime}}},
-	})
+	var adminUserInfo []UserInfo
+	adminUserInfo = append(adminUserInfo, UserInfo{"Name", "Seksit Disaro"})
 
-	if ok && errInsertRow == nil {
-		return nil, errors.New("Asset was already assigned.")
-	}
+	adminUser := &User{adminCert, ROLE_ADMIN, adminUserInfo ,currentDateTime }
+
+	compoundKey, _ := t.createCompoundKey("User", []string{ROLE_ADMIN, string(adminUser.Key)})
+	adminJSONBytes, _ := json.Marshal(adminUser)
+
+	stub.PutState(compoundKey, adminJSONBytes)
 
 	return nil, nil
 }
 
 func (t *PatientChaincode) Invoke(stub shim.ChaincodeStubInterface) ([]byte, error) {
-	function, _ := stub.GetFunctionAndParameters()
+	function, params := stub.GetFunctionAndParameters()
 
-	if function == "assign" {
-		fmt.Printf("Assign invoke!")
-	} else if function == "transfer" {
-		fmt.Printf("Transfer invoke!")
+	if function == "create_admin" {
+		fmt.Printf("Create Admin invoke!")
+		t.createAdmin(stub, params)
+	} else if function == "create_patient" {
+		fmt.Printf("Create Patient invoke!")
+		t.createPatient(stub, params)
+	} else if function == "create_hcp" {
+		fmt.Printf("Create HCP invoke!")
+		t.createHealthcareProvider(stub, params)
+	} else if function == "list_users" {
+		fmt.Printf("List users invoke!")
+		t.listPatients(stub)
+	} else if function == "append_medical_data" {
+		fmt.Printf("Append medical data invoke!")
+	} else if function == "request_permission" {
+		fmt.Printf("Request acess permission invoke!")
+	} else if function == "read_medical_data" {
+		fmt.Printf("Read medical data invoke!")
+	} else if function == "grant_permission" {
+		fmt.Printf("Grant access permission invoke!")
 	}
+
 	return nil, errors.New("Received unknown function invocation")
 }
 
 func (t *PatientChaincode) Query(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
 
 	return nil, nil
+}
+
+func (t *PatientChaincode) listPatients(stub shim.ChaincodeStubInterface) ([]byte,error) {
+	objectType := "User"
+	partialKeysForQuery := []string{ROLE_PATIENT}
+
+	keysIter, _ := t.partialCompoundKeyQuery(stub, objectType, partialKeysForQuery)
+	defer keysIter.Close()
+
+	var users []User
+	for keysIter.HasNext() {
+		_, userJSONBytes, _ := keysIter.Next()
+		user := User{}
+		json.Unmarshal(userJSONBytes, &user)
+		users = append(users, user)
+	}
+
+	return json.Marshal(users)
+}
+
+// Create user for this chain based on input role parameter. Return Unique ID for created user.
+func (t *PatientChaincode) createUserGeneric(stub shim.ChaincodeStubInterface, role string, params []string) ([]byte,error) {
+	cert, _ := stub.GetCallerMetadata()
+	currentDateTime := time.Now().Format(time.UnixDate)
+	inputHashData :=  string(cert[:]) + time.Now().Format(time.UnixDate)
+
+	// SHA1 Hash function for key
+	h := sha1.New()
+	h.Write([]byte(inputHashData))
+	bs := h.Sum(nil)
+
+	compoundKey, _ := t.createCompoundKey("User", []string{role, string(bs)})
+
+	// Create user object
+	var userInfo []UserInfo
+	userInfo = append(userInfo, UserInfo{"Name", "Hello World"})
+	userObj := &User{bs, role, userInfo ,currentDateTime}
+	userObjJsonBytes, _ := json.Marshal(userObj)
+
+	stub.PutState(compoundKey, userObjJsonBytes)
+	fmt.Printf("User created, Role = "+role+" Compounded Key = "+compoundKey)
+
+	return userObjJsonBytes, nil
+}
+
+func (t *PatientChaincode) createAdmin(stub shim.ChaincodeStubInterface, params []string) ([]byte, error) {
+	cert, _ := stub.GetCallerMetadata()
+	if t.checkRole(string(cert)) == ROLE_ADMIN {
+		return t.createUserGeneric(stub, ROLE_ADMIN, params)
+	} else {
+		fmt.Printf("")
+		return nil, errors.New("Cannot read caller's data or caller has no sufficient permission.")
+	}
+}
+
+func (t *PatientChaincode) createPatient(stub shim.ChaincodeStubInterface, params []string) ([]byte, error) {
+	return t.createUserGeneric(stub, ROLE_PATIENT, params)
+}
+
+func (t *PatientChaincode) createHealthcareProvider(stub shim.ChaincodeStubInterface, params []string) ([]byte, error) {
+	return t.createUserGeneric(stub, ROLE_HCP, params)
+}
+
+// Check key for role then return ROLE constant
+func (t *PatientChaincode) checkRole(key string) string {
+	return ROLE_ADMIN
+}
+
+// Check patient key, HCP key and then check for authorization return AuthConst
+func (t *PatientChaincode) checkAuthorization(patientKey string, hcpKey string, checkAuthConst int) int {
+	return AUTHORIZE_NOTHING
+}
+
+func (t *PatientChaincode) readPatientMedicalData(patientKey string, readerKey string, medicalDataType string, limit int) []MedicalData {
+	return nil
+}
+
+func (t *PatientChaincode) appendPatientMedicalData(patientKey string, appenderKey string,
+	medicalDataType string, medicalDataId string, medicalData []byte) bool {
+	return true
+}
+
+func (t *PatientChaincode) appendAuditLog(subjectKey string, actionConst string, objectKey string,
+	result string, reasonOrRemark string) bool {
+	return true
+}
+
+func (t *PatientChaincode) requestAccessPermission(patientKey string, healthcareProviderKey string,
+	requestAuthConst int) bool {
+	return true
+}
+
+func (t *PatientChaincode) grantAccessPermission(patientKey string, healthcareProviderKey string,
+	grantAuthConst int) bool {
+	return true
+}
+
+// ============================================================================================================================
+// Utility functions (may become chaincode APIs)
+// ============================================================================================================================
+
+func (t *PatientChaincode) createCompoundKey(objectType string, keys []string) (string, error) {
+	var keyBuffer bytes.Buffer
+	keyBuffer.WriteString(objectType)
+	for _, key := range keys {
+		keyBuffer.WriteString(strconv.Itoa(len(key)))
+		keyBuffer.WriteString(key)
+	}
+	return keyBuffer.String(), nil
+}
+
+func (t *PatientChaincode) partialCompoundKeyQuery(stub shim.ChaincodeStubInterface, objectType string, keys []string) (shim.StateRangeQueryIteratorInterface, error) {
+	// TODO - call RangeQueryState() based on the partial keys and pass back the iterator
+
+	keyString, _ := t.createCompoundKey(objectType, keys)
+	keysIter, err := stub.RangeQueryState(keyString+"1", keyString+":")
+	if err != nil {
+		return nil, fmt.Errorf("Error fetching rows: %s", err)
+	}
+	defer keysIter.Close()
+
+	return keysIter, err
 }
 
 func main() {
