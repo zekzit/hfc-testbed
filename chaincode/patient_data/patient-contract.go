@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/json"
+	"encoding/base64"
 	"strconv"
 
 	"github.com/hyperledger/fabric/core/chaincode/shim"
@@ -53,16 +54,16 @@ func (t *PatientChaincode) Invoke(stub shim.ChaincodeStubInterface) ([]byte, err
 
 	if function == "create_admin" {
 		fmt.Printf("Create Admin invoke!")
-		t.createAdmin(stub, params)
+		return t.createAdmin(stub, params)
 	} else if function == "create_patient" {
 		fmt.Printf("Create Patient invoke!")
-		t.createPatient(stub, params)
+		return t.createPatient(stub, params)
 	} else if function == "create_hcp" {
 		fmt.Printf("Create HCP invoke!")
-		t.createHealthcareProvider(stub, params)
+		return t.createHealthcareProvider(stub, params)
 	} else if function == "list_users" {
 		fmt.Printf("List users invoke!")
-		t.listPatients(stub)
+		return t.listPatients(stub)
 	} else if function == "append_medical_data" {
 		fmt.Printf("Append medical data invoke!")
 	} else if function == "request_permission" {
@@ -110,16 +111,16 @@ func (t *PatientChaincode) createUserGeneric(stub shim.ChaincodeStubInterface, r
 	h.Write([]byte(inputHashData))
 	bs := h.Sum(nil)
 
-	compoundKey, _ := t.createCompoundKey("User", []string{role, string(bs)})
+	compoundKey, _ := t.createCompoundKey("User", []string{role, base64.URLEncoding.EncodeToString(bs)})
 
 	// Create user object
 	var userInfo []UserInfo
 	userInfo = append(userInfo, UserInfo{"Name", "Hello World"})
-	userObj := &User{bs, role, userInfo ,currentDateTime}
+	userObj := User{bs, role, userInfo ,currentDateTime}
 	userObjJsonBytes, _ := json.Marshal(userObj)
 
 	stub.PutState(compoundKey, userObjJsonBytes)
-	fmt.Printf("User created, Role = "+role+" Compounded Key = "+compoundKey)
+	fmt.Printf("User created, Role = "+role+" Compounded Key = "+compoundKey+"\n")
 
 	return userObjJsonBytes, nil
 }
