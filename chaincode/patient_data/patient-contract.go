@@ -32,19 +32,27 @@ func (t *PatientChaincode) Init(stub shim.ChaincodeStubInterface) ([]byte, error
 		return nil, errors.New("Invalid admin certificate. Empty.")
 	}
 
-	myLogger.Debug("The administrator is [%x]", adminCert)
-
 	currentDateTime := time.Now().Format(time.UnixDate)
 
 	var adminUserInfo []UserInfo
 	adminUserInfo = append(adminUserInfo, UserInfo{"Name", "Seksit Disaro"})
 
-	adminUser := &User{adminCert, ROLE_ADMIN, adminUserInfo ,currentDateTime }
+	adminUser := User{adminCert, ROLE_ADMIN, adminUserInfo ,currentDateTime }
+	compoundKey, _ := t.createCompoundKey("User", []string{ROLE_ADMIN, base64.URLEncoding.EncodeToString(adminUser.Key)})
 
-	compoundKey, _ := t.createCompoundKey("User", []string{ROLE_ADMIN, string(adminUser.Key)})
+	myLogger.Debug("The administrator is [%x]", compoundKey)
+
 	adminJSONBytes, _ := json.Marshal(adminUser)
-
 	stub.PutState(compoundKey, adminJSONBytes)
+
+	// Initialize user list array
+	var userListArray []string
+	userListArray = append(userListArray, compoundKey)
+	fmt.Println("UserListArray =",userListArray)
+	fmt.Println("Number of user =",len(userListArray),"(should be 1)")
+	jsonAsBytes, _ := json.Marshal(userListArray)
+	errPutState := stub.PutState("UserList",jsonAsBytes)
+	fmt.Println("errPutState =",errPutState)
 
 	return nil, nil
 }
@@ -52,37 +60,55 @@ func (t *PatientChaincode) Init(stub shim.ChaincodeStubInterface) ([]byte, error
 func (t *PatientChaincode) Invoke(stub shim.ChaincodeStubInterface) ([]byte, error) {
 	function, params := stub.GetFunctionAndParameters()
 
-	if function == "create_admin" {
-		fmt.Printf("Create Admin invoke!")
+	if function == "init" {
+		fmt.Println("Init again!")
+		return t.Init(stub)
+ 	}else if function == "create_admin" {
+		fmt.Println("Create Admin invoke!")
 		return t.createAdmin(stub, params)
 	} else if function == "create_patient" {
-		fmt.Printf("Create Patient invoke!")
+		fmt.Println("Create Patient invoke!")
 		return t.createPatient(stub, params)
 	} else if function == "create_hcp" {
-		fmt.Printf("Create HCP invoke!")
+		fmt.Println("Create HCP invoke!")
 		return t.createHealthcareProvider(stub, params)
 	} else if function == "list_users" {
-		fmt.Printf("List users invoke!")
+		fmt.Println("List users invoke!")
 		return t.listPatients(stub)
 	} else if function == "append_medical_data" {
-		fmt.Printf("Append medical data invoke!")
+		fmt.Println("Append medical data invoke!")
 	} else if function == "request_permission" {
-		fmt.Printf("Request acess permission invoke!")
+		fmt.Println("Request acess permission invoke!")
 	} else if function == "read_medical_data" {
-		fmt.Printf("Read medical data invoke!")
+		fmt.Println("Read medical data invoke!")
 	} else if function == "grant_permission" {
-		fmt.Printf("Grant access permission invoke!")
+		fmt.Println("Grant access permission invoke!")
+	} else if function=="get_admin" {
+		fmt.Println("GET ADMIN CALLED!! (Is that that serious?)")
+		result, err := stub.GetState("ADMIN5MEUCIQCV3LNIwSEVtkk5pVuztd3UlmDzSYkkY0rqEaqOeNf1EAIgICetPpM88ocF11jDbqiIriNzwsIWB955xoeH5gJSq8A=")
+		fmt.Println("Result = ",result)
+		fmt.Println("Error = ", err)
+		adminUser := User{}
+		json.Unmarshal(result, adminUser)
+		fmt.Println(adminUser);
+		return result, err
 	}
 
 	return nil, errors.New("Received unknown function invocation")
 }
 
-func (t *PatientChaincode) Query(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
+func (t *PatientChaincode) Query(stub shim.ChaincodeStubInterface) ([]byte, error) {
+	function, _ := stub.GetFunctionAndParameters()
 
-	return nil, nil
+	if function == "list_users" {
+		fmt.Println("List users invoke!")
+		return t.listPatients(stub)
+	}
+
+	return nil, errors.New("Received unknown query function")
 }
 
-func (t *PatientChaincode) listPatients(stub shim.ChaincodeStubInterface) ([]byte,error) {
+func (t *PatientChaincode) listPatientsOld(stub shim.ChaincodeStubInterface) ([]byte,error) {
 	objectType := "User"
 	partialKeysForQuery := []string{ROLE_PATIENT}
 
@@ -98,6 +124,25 @@ func (t *PatientChaincode) listPatients(stub shim.ChaincodeStubInterface) ([]byt
 	}
 
 	return json.Marshal(users)
+}
+
+func (t *PatientChaincode) listPatients(stub shim.ChaincodeStubInterface) ([]byte,error) {
+	var userListArray []string
+	rawArray, err := stub.GetState("UserList")
+
+	fmt.Println("UserList state =", rawArray)
+	fmt.Println("err =", err)
+
+	errUnmarshal := json.Unmarshal(rawArray,&userListArray)
+	fmt.Println("Unmarshal error =",errUnmarshal)
+	fmt.Println("Unmarshal userListArray =",userListArray)
+	fmt.Println("Number of users =", len(userListArray))
+
+	for i := 0; i<len(userListArray); i++ {
+		fmt.Println(userListArray[i])
+	}
+
+	return rawArray, err
 }
 
 // Create user for this chain based on input role parameter. Return Unique ID for created user.
@@ -120,9 +165,17 @@ func (t *PatientChaincode) createUserGeneric(stub shim.ChaincodeStubInterface, r
 	userObjJsonBytes, _ := json.Marshal(userObj)
 
 	stub.PutState(compoundKey, userObjJsonBytes)
-	fmt.Printf("User created, Role = "+role+" Compounded Key = "+compoundKey+"\n")
+	fmt.Println("User created, Role = "+role+" Compounded Key = "+compoundKey+"\n")
 
-	return userObjJsonBytes, nil
+	// Append user list array
+	var userListArray []string
+	rawArray, err := stub.GetState("UserList")
+	json.Unmarshal(rawArray,&userListArray)
+	userListArray = append(userListArray, compoundKey)
+	jsonAsBytes, _ := json.Marshal(userListArray)
+	err = stub.PutState("UserList", jsonAsBytes)
+
+	return userObjJsonBytes, err
 }
 
 func (t *PatientChaincode) createAdmin(stub shim.ChaincodeStubInterface, params []string) ([]byte, error) {
@@ -130,7 +183,7 @@ func (t *PatientChaincode) createAdmin(stub shim.ChaincodeStubInterface, params 
 	if t.checkRole(string(cert)) == ROLE_ADMIN {
 		return t.createUserGeneric(stub, ROLE_ADMIN, params)
 	} else {
-		fmt.Printf("")
+		fmt.Println("")
 		return nil, errors.New("Cannot read caller's data or caller has no sufficient permission.")
 	}
 }
@@ -195,6 +248,7 @@ func (t *PatientChaincode) partialCompoundKeyQuery(stub shim.ChaincodeStubInterf
 	// TODO - call RangeQueryState() based on the partial keys and pass back the iterator
 
 	keyString, _ := t.createCompoundKey(objectType, keys)
+	fmt.Println("Query range from "+keyString+"1 - "+keyString+":")
 	keysIter, err := stub.RangeQueryState(keyString+"1", keyString+":")
 	if err != nil {
 		return nil, fmt.Errorf("Error fetching rows: %s", err)
@@ -207,6 +261,6 @@ func (t *PatientChaincode) partialCompoundKeyQuery(stub shim.ChaincodeStubInterf
 func main() {
 	err := shim.Start(new(PatientChaincode))
 	if err != nil {
-		fmt.Printf("Error starting Simple chaincode: %s", err)
+		fmt.Println("Error starting Patient chaincode: %s", err)
 	}
 }
